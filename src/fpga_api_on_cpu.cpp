@@ -127,15 +127,28 @@ void FPGA::largeMM(const float* weight_mat, const float* input_mat, float* outpu
       for(int k = 0; k < num_matrix2; k += v_size_)
       {
         // 0) Initialize input vector
+        for (int m = 0; m < v_size_; m++) {
+          for (int n = 0; n < v_size_; n++) {
+            m1[m*v_size_ + n] = m2[m*v_size_ + n] = 0;
+          }
+        }
         int block_row = min(v_size_, num_output-i);
         int block_col_1 = min(v_size_, num_input-j);
         int block_col_2 = min(v_size_, num_matrix2-k);
 
         // 1) Assign a m1
-        // IMPLEMENT THIS
+        for (int m = 0; m < block_row; m++) {
+          for (int n = 0; n < block_col_1; n++) {
+            m1[m*v_size_ + n] = weight_mat[(i+m)*num_input + j+n];
+          }
+        }
 
         // 2) Assign a m2
-        // IMPLEMENT THIS
+        for (int m = 0; m < block_col_1; m++) {
+          for (int n = 0; n < block_col_2; n++) {
+            m2[m*v_size_ + n] = input_mat[(j+m)*num_matrix2 + k+n];
+          }
+        }
 
         // 3) Call a function `blockMM() to execute Matrix matrix multiplication
         const float* ret = this->blockMM();
@@ -167,14 +180,23 @@ void FPGA::largeMV(const float* large_mat, const float* input, float* output, in
     for(int j = 0; j < num_input; j += v_size_)
     {			
       // 0) Initialize input vector
+      for (int k = 0; k < v_size_; ++k) {
+				vec[k] = 0;
+			}
       int block_row = min(m_size_, num_output-i);
       int block_col = min(v_size_, num_input-j);
 
       // 1) Assign a vector
-      // IMPLEMENT THIS
+      for(int k = 0; k < block_col; ++k) {
+				vec[k] = input[j+k];
+			}
 
       // 2) Assign a matrix
-      // IMPLEMENT THIS
+      for(int m = 0; m < block_row; ++m) {
+				for(int n = 0; n < block_col; ++n) {
+					mat[m*v_size_ + n] = large_mat[(i+m)*num_input + j+n];
+				}
+			}
 
       // 3) Call a function `blockMV() to execute MV multiplication
       const float* ret = this->blockMV();
@@ -212,5 +234,43 @@ void FPGA::convLowering(const std::vector<std::vector<std::vector<std::vector<fl
   // For example,
   // new_weights[0][0] = cnn_weights[0][0][0][0];
   // new_inputs[0][0] = inputs[0][0][0];
+  long long block_num = (input_height - conv_height + 1) * (input_width - conv_width + 1);
+  long long block_size = conv_height * conv_width;
 
+  new_weights.reserve(conv_channel);
+  for (int i = 0; i < conv_channel; i++) {
+    new_weights[i].reserve(conv_width * conv_height * input_channel);
+  }
+
+  new_inputs.reserve(conv_width * conv_height * input_channel);
+  for (int i = 0; i < conv_width * conv_height * input_channel; i++) {
+    new_inputs[i].reserve(block_num);
+  }
+  for (int i = 0; i < conv_width * conv_height * input_channel; i++) {
+    for (int j = 0; j < block_num; j++) {
+      new_inputs[i][j] = 0;
+    }
+  }
+
+  for (int i = 0; i < conv_channel; i++) {
+    for (int j = 0; j < input_channel; j++) {
+      for (int k = 0; k < conv_height; k++) {
+        for (int l = 0; l < conv_width; l++) {
+          new_weights[i][conv_width*conv_height*j + conv_height*k + l] = cnn_weights[i][j][k][l];
+        }
+      }
+    }
+  }
+
+  for (int i = 0; i < input_channel; i++) {
+    for (int j = 0; j < input_height - conv_height + 1; j++) {
+      for (int k = 0; k < input_width - conv_width + 1; k++) {
+        for (int m = 0; m < conv_height; m++) {
+          for (int n = 0; n < conv_width; n++) {
+            new_inputs[conv_height*conv_width*i + conv_height*m + n][(input_width - conv_width + 1)*j + k] = inputs[i][j+m][k+n];
+          }
+        }
+      }
+    }
+  }
 }
